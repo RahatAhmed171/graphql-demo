@@ -7,31 +7,37 @@ Database design of the project:
 How to use the api:
 
 a) To get all product along with transactions:
+```javascript
   Query{
     products{
       id
       transaction
       }
    }
+ ```
    
 b) To get a single product along with its transactions:
+```javascript
 Query{
   product(id:"bcd123"){
     id
     transactions
     }
  }
+```
  
 c) Add a product:
-
+```javascript
 Mutation{
  addProduct(id:"xyz123"){
   id
   }
 }
+```
+
 
 d) Add a transaction for a product:
-
+```javascript
 Mutation{
   addTransaction(quantity:3, time:"2022-10-22", productId:"xyz123"){
     id
@@ -39,11 +45,12 @@ Mutation{
     time
     }
   }
+ ```
   
 e) Delete a product:
-
+```
 deleteProduct(id:"xyz123"){
   }
-  
+ ```
   
   
