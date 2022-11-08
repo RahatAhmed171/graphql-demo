@@ -1,132 +1,112 @@
-const express=require('express')
-const{graphqlHTTP}=require('express-graphql')
-const{GraphQLSchema,GraphQLObjectType,GraphQLList,GraphQLString,GraphQLInt,GraphQLNonNull,GraphQLBoolean, subscribe}=require('graphql')
 
+const {createServer,createPubSub}=require('graphql-yoga')
 const {sequelize,product,transaction}=require('./models/product_transaction')
 
 
-// Subscription feature hasn't been implemented yet
+const pubsub=createPubSub()
+const server=createServer({
+    schema:{
+        typeDefs:
+        `
+      
+        type TransactionType{
+            id:String!
+            quantity:Int!
+            time: String!
+        }
+    
+        type ProductType{
+            id:String!
+            transactions:[TransactionType]
+           
+        }
+        type Query {
+            products:[ProductType]
+            product(id: String):ProductType
+        }
+        type Mutation{
+            addProduct(id:String!):ProductType
+            addTransaction(quantity:Int!,time:String!,productId:String!):TransactionType
+            deleteProduct(id:String!):Int
+        }
+        type AddProductSubscriptionPayload{
+            mutation:String!
+        }
 
-const TransactionType=new GraphQLObjectType({
-    name:'Transaction',
-    description: 'This is a representation of a transaction',
-    fields:()=>({
-        id: {type:new GraphQLNonNull(GraphQLString),
-            resolve:async(parent)=>{
-                return parent.productId
-            }
+        type Subscription{
+            notifyuser: AddProductSubscriptionPayload
+        }
+        `,
+        resolvers:{
+        Query:{
+  
+            async products() {
+                let result= await product.findAll({attributes:['id']})
+                return result
+              },
+            async product(parent, args) {
+                let result=await product.findByPk(args.id)
+              
+                return result
+              }
         },
-        quantity:{type:GraphQLInt},
-        time: {type: GraphQLString}
-    })
-})
-const ProductType=new GraphQLObjectType({
-    name:'Product',
-    description: 'This is a representation of a product',
-    fields:()=>({
-        id: {type:new GraphQLNonNull(GraphQLString)},
-        transactions:{
-            type: new GraphQLList(TransactionType),
-            resolve:async(product)=>{
+        ProductType:{
+            transactions:async(product)=>{
                 let result=await transaction.findAll({attributes:['productId','quantity','time'],where:{productId:product.id}})
                 return result
             }
-        }
-    })
-})
-
-const rootquery=new GraphQLObjectType({
-    name: 'Query',
-    description: 'Root Query',
-    fields:()=>({
-           product:{
-            type: ProductType,
-            description: "a single book",
-            args:{
-                id:{type: GraphQLString}
-            },
-            resolve:async(parent,args)=>{
-                
-                let result=await product.findByPk(args.id)
-          
-                return result
+        },
+        TransactionType:{
+            id:(parent)=>{
+               return parent.productId 
             }
         },
-        products: {
-            type: new GraphQLList(ProductType),
-            description: 'List of all products',
-            resolve:async()=>{
-               let result= await product.findAll({attributes:['id']})
-               return result
-                
-            }
-        }
-
-     
-    })
-})
-
-const RootMutationType= new GraphQLObjectType({
-    name:'Mutation',
-    description:"Root Mutation",
-    fields:()=>({
-        addProduct:{
-            type: ProductType,
-            description:"Adding a product",
-            args:{
-                id:{type:new GraphQLNonNull(GraphQLString)}
-            },
-            resolve:async(parent,args)=>{
+        Mutation:{
+            async addProduct(parent,args){
                 let result=await product.create({id:args.id})
+                pubsub.publish('notifyuser',{
+                    notifyuser:{
+                        mutation:`A product with ${args.id} has been added`,
+                      
+                    }
+                })
                 
                 return result
-            }
-        },
-        addTransaction:{
-            type: TransactionType,
-            description:"Adding a transaction",
-            args:{
-                quantity:{type:GraphQLInt},
-                time: {type: GraphQLString},
-                productId:{type: new GraphQLNonNull(GraphQLString)}
             },
-            resolve:async(parent,args)=>{
+            async addTransaction(parent,args){
                 let time_now=new Date(args.time)
                 let result=await transaction.create({quantity:args.quantity,time:time_now,productId:args.productId})
                 return result
-            }
-
-        },
-        deleteProduct:{
-            type: GraphQLInt,
-            description:"Deleting a product",
-            args:{
-                id:{type:new GraphQLNonNull(GraphQLString)}
             },
-            resolve:async(parent,args)=>{
-                return await product.destroy({
+            async deleteProduct(parent,args){
+                let result=await product.destroy({
                     where:{id:args.id}
                 })
+                pubsub.publish('notifyuser',{
+                    notifyuser:{
+                        mutation:`A product with ${args.id} has been deleted`,
+                      
+                    }
+                })
+                return result
+            }
+        },
+        Subscription:{
+            notifyuser:{
+                subscribe(parent,args){
+                    return pubsub.subscribe('notifyuser')
+                }
             }
         }
+    }
 
-    })
+        
+    }
+   
 })
+server.start()
 
 
 
 
-
-const schema=new GraphQLSchema({
-    query:rootquery,
-    mutation: RootMutationType
-  
-})
-const app=express()
-app.use('/graphql',graphqlHTTP({
-    schema:schema,
-    graphiql:true
-}));
-app.listen(1234)
-console.log('Running graphql server')
 
