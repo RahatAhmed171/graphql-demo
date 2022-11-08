@@ -48,9 +48,18 @@ Mutation{
  ```
   
 e) Delete a product:
-```
+```javascript
 deleteProduct(id:"xyz123"){
   }
  ```
-  
+f) Subscribing to event to get notification when product is added or deleted
+
+```javascript
+subscription{
+  notifyuser{
+    mutation
+    }
+}
+ ```
+
   
